@@ -15,12 +15,13 @@ readme = "README.md"
 travis-ci = { repository = "bobbobbio/http_io" }
 
 [features]
-default = ["std", "openssl"]
+default = []
 std = []
 
 [dependencies]
-hashbrown = "^0.3"
+hashbrown = {version="^0.3", default-features = false,features=["nightly"]}
 openssl = { version = "^0.10", optional = true }
+core2 = { version = "0.3.5", git = "https://github.com/jredrado/core2", branch = "main", default-features=false, features=["alloc","nightly"]}
 
 [dev-dependencies]
 structopt = "0.3.7"

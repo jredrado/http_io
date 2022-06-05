@@ -4,7 +4,7 @@
 #![allow(clippy::write_with_newline)]
 
 use crate::error::{Error, Result};
-use crate::io::{self, Read, Write};
+use core2::io::{self, Read, Write};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec, vec::Vec};
 use core::cmp;
@@ -14,17 +14,17 @@ use core::str;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-struct HttpBodyChunk<S: io::Read> {
+struct HttpBodyChunk<S: core2::io::Read> {
     inner: io::Take<HttpReadTilCloseBody<S>>,
 }
 
-pub struct HttpChunkedBody<S: io::Read> {
+pub struct HttpChunkedBody<S: core2::io::Read> {
     content_length: Option<u64>,
     stream: Option<HttpReadTilCloseBody<S>>,
     chunk: Option<HttpBodyChunk<S>>,
 }
 
-impl<S: io::Read> HttpChunkedBody<S> {
+impl<S: core2::io::Read> HttpChunkedBody<S> {
     fn new(content_length: Option<u64>, stream: HttpReadTilCloseBody<S>) -> Self {
         HttpChunkedBody {
             content_length,
@@ -34,7 +34,7 @@ impl<S: io::Read> HttpChunkedBody<S> {
     }
 }
 
-impl<S: io::Read> HttpBodyChunk<S> {
+impl<S: core2::io::Read> HttpBodyChunk<S> {
     fn new(mut stream: HttpReadTilCloseBody<S>) -> Result<Option<Self>> {
         let mut ts = CrLfStream::new(&mut stream);
         let size_str = ts.expect_next()?;
@@ -54,14 +54,14 @@ impl<S: io::Read> HttpBodyChunk<S> {
     }
 }
 
-impl<S: io::Read> io::Read for HttpBodyChunk<S> {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+impl<S: core2::io::Read> core2::io::Read for HttpBodyChunk<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> core2::io::Result<usize> {
         self.inner.read(buffer)
     }
 }
 
-impl<S: io::Read> io::Read for HttpChunkedBody<S> {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+impl<S: core2::io::Read> core2::io::Read for HttpChunkedBody<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> core2::io::Result<usize> {
         if let Some(mut chunk) = self.chunk.take() {
             let read = chunk.read(buffer)?;
             if read == 0 {
@@ -75,7 +75,7 @@ impl<S: io::Read> io::Read for HttpChunkedBody<S> {
                 Ok(read)
             }
         } else if let Some(stream) = self.stream.take() {
-            let new_chunk = HttpBodyChunk::new(stream)?;
+            let new_chunk = HttpBodyChunk::new(stream).map_err( |e| core2::io::Error::new(core2::io::ErrorKind::Other,"HttpBodyChunk"))?;
             match new_chunk {
                 Some(chunk) => {
                     self.chunk = Some(chunk);
@@ -94,7 +94,7 @@ mod chunked_encoding_tests {
     use super::HttpChunkedBody;
     use crate::error::Result;
     use std::io;
-    use std::io::Read;
+    use std::core2::io::Read;
 
     fn chunk_test(i: &'static str) -> Result<String> {
         let input = io::BufReader::new(io::Cursor::new(i));
@@ -124,17 +124,17 @@ mod chunked_encoding_tests {
     }
 }
 
-type HttpReadTilCloseBody<S> = io::BufReader<S>;
+type HttpReadTilCloseBody<S> = io::BufReader<S,1024>;
 type HttpLimitedBody<S> = io::Take<HttpReadTilCloseBody<S>>;
 
-pub enum HttpBody<S: io::Read> {
+pub enum HttpBody<S: core2::io::Read> {
     Chunked(HttpChunkedBody<S>),
     Limited(HttpLimitedBody<S>),
     ReadTilClose(HttpReadTilCloseBody<S>),
 }
 
-impl<S: io::Read> io::Read for HttpBody<S> {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+impl<S: core2::io::Read> core2::io::Read for HttpBody<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> core2::io::Result<usize> {
         match self {
             HttpBody::Chunked(i) => i.read(buffer),
             HttpBody::Limited(i) => i.read(buffer),
@@ -143,11 +143,11 @@ impl<S: io::Read> io::Read for HttpBody<S> {
     }
 }
 
-impl<S: io::Read> HttpBody<S> {
+impl<S: core2::io::Read> HttpBody<S> {
     pub fn new(
         encoding: Option<&str>,
         content_length: Option<u64>,
-        body: io::BufReader<S>,
+        body: io::BufReader<S,1024>,
     ) -> Self {
         if encoding == Some("chunked") {
             HttpBody::Chunked(HttpChunkedBody::new(content_length, body))
@@ -209,7 +209,7 @@ pub struct CrLfStream<W> {
     stream: io::Bytes<W>,
 }
 
-impl<W: io::Read> CrLfStream<W> {
+impl<W: core2::io::Read> CrLfStream<W> {
     pub fn new(stream: W) -> Self {
         CrLfStream {
             stream: stream.bytes(),
@@ -217,7 +217,7 @@ impl<W: io::Read> CrLfStream<W> {
     }
 }
 
-impl<W: io::Read> Iterator for CrLfStream<W> {
+impl<W: core2::io::Read> Iterator for CrLfStream<W> {
     type Item = Result<String>;
     fn next(&mut self) -> Option<Result<String>> {
         match self.inner_next() {
@@ -227,7 +227,7 @@ impl<W: io::Read> Iterator for CrLfStream<W> {
     }
 }
 
-impl<W: io::Read> CrLfStream<W> {
+impl<W: core2::io::Read> CrLfStream<W> {
     fn inner_next(&mut self) -> Result<Option<String>> {
         let mut line = Vec::new();
         while let Some(byte) = self.stream.next() {
@@ -1309,7 +1309,7 @@ impl HttpHeaders {
         self.headers.insert(key.into(), value.into());
     }
 
-    fn deserialize<R: io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {
+    fn deserialize<R: core2::io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {
         let mut headers = vec![];
         let mut iter = s.peekable();
         while let Some(line) = iter.next() {
@@ -1325,7 +1325,7 @@ impl HttpHeaders {
         Ok(HttpHeaders::from(headers))
     }
 
-    fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+    fn serialize<W: core2::io::Write>(&self, mut w: W) -> Result<()> {
         for (key, value) in &self.headers {
             write!(&mut w, "{}: {}\r\n", key, value)?;
         }
@@ -1383,20 +1383,20 @@ mod http_headers_tests {
     }
 }
 
-pub struct HttpResponse<B: io::Read> {
+pub struct HttpResponse<B: core2::io::Read> {
     version: HttpVersion,
     pub status: HttpStatus,
     pub headers: HttpHeaders,
     pub body: HttpBody<B>,
 }
 
-impl HttpResponse<Box<dyn io::Read>> {
+impl HttpResponse<Box<dyn core2::io::Read>> {
     pub fn from_string<S: Into<String>>(status: HttpStatus, s: S) -> Self {
         HttpResponse::new(status, Box::new(io::Cursor::new(s.into())))
     }
 }
 
-impl<B: io::Read> HttpResponse<B> {
+impl<B: core2::io::Read> HttpResponse<B> {
     pub fn new(status: HttpStatus, body: B) -> Self {
         let body = HttpBody::ReadTilClose(io::BufReader::new(body));
         HttpResponse {
@@ -1439,7 +1439,7 @@ impl<B: io::Read> HttpResponse<B> {
         self.headers.insert(key, value);
     }
 
-    pub fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+    pub fn serialize<W: core2::io::Write>(&self, mut w: W) -> Result<()> {
         write!(&mut w, "{} {}\r\n", self.version, self.status)?;
         self.headers.serialize(&mut w)?;
         write!(&mut w, "\r\n")?;
@@ -1560,7 +1560,7 @@ mod http_method_tests {
     }
 }
 
-pub struct HttpRequest<B: io::Read> {
+pub struct HttpRequest<B: core2::io::Read> {
     pub method: HttpMethod,
     pub uri: String,
     version: HttpVersion,
@@ -1587,12 +1587,12 @@ impl HttpRequest<io::Empty> {
     }
 }
 
-pub struct OutgoingBody<S: io::Read + io::Write> {
-    socket: io::BufWriter<S>,
+pub struct OutgoingBody<S: core2::io::Read + core2::io::Write> {
+    socket: io::BufWriter<S,1024>,
 }
 
-impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl<S: core2::io::Read + core2::io::Write> core2::io::Write for OutgoingBody<S> {
+    fn write(&mut self, buf: &[u8]) -> core2::io::Result<usize> {
         let len = buf.len();
         if len == 0 {
             return Ok(0);
@@ -1603,13 +1603,13 @@ impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
         Ok(len)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
+    fn flush(&mut self) -> core2::io::Result<()> {
         self.socket.flush()
     }
 }
 
-impl<S: io::Read + io::Write> OutgoingBody<S> {
-    fn new(socket: io::BufWriter<S>) -> Self {
+impl<S: core2::io::Read + core2::io::Write> OutgoingBody<S> {
+    fn new(socket: io::BufWriter<S,1024>) -> Self {
         OutgoingBody { socket }
     }
 
@@ -1617,17 +1617,20 @@ impl<S: io::Read + io::Write> OutgoingBody<S> {
         write!(&mut self.socket, "0\r\n\r\n")?;
         self.socket.flush()?;
 
-        let socket = self.socket.into_inner()?;
+        let socket = self.socket.into_inner().map_err(|e| Error::IoError(core2::io::Error::new(
+            core2::io::ErrorKind::Other,
+            "Socket error finish",
+        )))?;
         Ok(HttpResponse::deserialize(socket)?)
     }
 }
 
-impl<B: io::Read> HttpRequest<B> {
+impl<B: core2::io::Read> HttpRequest<B> {
     pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
         self.headers.insert(key, value);
     }
 
-    pub fn deserialize(mut stream: io::BufReader<B>) -> Result<Self> {
+    pub fn deserialize(mut stream: io::BufReader<B,1024>) -> Result<Self> {
         let mut ts = CrLfStream::new(&mut stream);
         let first_line = ts.expect_next()?;
         let mut parser = Parser::new(&first_line);
@@ -1652,10 +1655,10 @@ impl<B: io::Read> HttpRequest<B> {
     }
 }
 
-impl<B: io::Read> HttpRequest<B> {
-    pub fn serialize<S: io::Read + io::Write>(
+impl<B: core2::io::Read> HttpRequest<B> {
+    pub fn serialize<S: core2::io::Read + core2::io::Write>(
         &self,
-        mut w: io::BufWriter<S>,
+        mut w: io::BufWriter<S,1024>,
     ) -> Result<OutgoingBody<S>> {
         write!(&mut w, "{} {} {}\r\n", self.method, self.uri, self.version)?;
         self.headers.serialize(&mut w)?;

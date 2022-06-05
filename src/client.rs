@@ -53,7 +53,7 @@
 //!```
 
 use crate::error::{Error, Result};
-use crate::io;
+use core2::io;
 #[cfg(feature = "std")]
 use crate::protocol::HttpStatus;
 use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
@@ -140,7 +140,7 @@ impl HttpRequestBuilder {
     }
 
     /// Send the built request on the given socket
-    pub fn send<S: io::Read + io::Write>(self, socket: S) -> Result<OutgoingBody<S>> {
+    pub fn send<S: core2::io::Read + core2::io::Write>(self, socket: S) -> Result<OutgoingBody<S>> {
         self.request.serialize(io::BufWriter::new(socket))
     }
 
@@ -153,7 +153,7 @@ impl HttpRequestBuilder {
 
 /// Represents the ability to connect an abstract stream to some destination address.
 pub trait StreamConnector {
-    type Stream: io::Read + io::Write;
+    type Stream: core2::io::Read + core2::io::Write;
     type StreamAddr: Hash + Eq + Clone;
     fn connect(a: Self::StreamAddr) -> Result<Self::Stream>;
     fn to_stream_addr(url: Url) -> Result<Self::StreamAddr>;
@@ -231,11 +231,11 @@ impl<S: StreamConnector> HttpClient<S> {
 }
 
 #[cfg(feature = "std")]
-fn send_request<R: io::Read>(
+fn send_request<R: core2::io::Read>(
     builder: HttpRequestBuilder,
     url: Url,
     mut body: R,
-) -> Result<Box<dyn io::Read>> {
+) -> Result<Box<dyn core2::io::Read>> {
     let stream = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
     let (status, body) = match &url.scheme {
         #[cfg(feature = "openssl")]
@@ -252,7 +252,7 @@ fn send_request<R: io::Read>(
             let response = request.finish()?;
             (
                 response.status,
-                Box::new(response.body) as Box<dyn io::Read>,
+                Box::new(response.body) as Box<dyn core2::io::Read>,
             )
         }
         Scheme::Http => {
@@ -261,7 +261,7 @@ fn send_request<R: io::Read>(
             let response = request.finish()?;
             (
                 response.status,
-                Box::new(response.body) as Box<dyn io::Read>,
+                Box::new(response.body) as Box<dyn core2::io::Read>,
             )
         }
         s => {
@@ -285,7 +285,7 @@ use crate::server::{
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<dyn io::Read>>
+pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<dyn core2::io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
@@ -336,7 +336,7 @@ fn get_request_ssl() -> Result<()> {
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<Box<dyn io::Read>>
+pub fn put<U: TryInto<Url>, R: core2::io::Read>(url: U, body: R) -> Result<Box<dyn core2::io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {

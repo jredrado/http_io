@@ -1,44 +1,9 @@
 //! This module provides re-implementations of things from std::io for building without std
 
-pub use crate::error::{Error, Result};
+pub use core2::io::{Error, Result};;
 use core::cmp;
 
-pub trait Read {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
-    fn take(self, limit: u64) -> Take<Self>
-    where
-        Self: Sized,
-    {
-        Take {
-            inner: self,
-            limit: limit,
-        }
-    }
-    fn bytes(self) -> Bytes<Self>
-    where
-        Self: Sized,
-    {
-        Bytes { inner: self }
-    }
-
-    fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
-        while !buf.is_empty() {
-            match self.read(buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let tmp = buf;
-                    buf = &mut tmp[n..];
-                }
-                Err(e) => return Err(e),
-            }
-        }
-        if !buf.is_empty() {
-            Err(Error::UnexpectedEof("failed to fill whole buffer".into()))
-        } else {
-            Ok(())
-        }
-    }
-}
+use core2::io::{Read,Write};
 
 impl<T: Read + ?Sized> Read for &mut T {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -52,55 +17,6 @@ impl<T: Read + ?Sized> Read for alloc::boxed::Box<T> {
     }
 }
 
-pub trait Write {
-    fn write(&mut self, buf: &[u8]) -> Result<usize>;
-    fn flush(&mut self) -> Result<()>;
-
-    fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
-        while !buf.is_empty() {
-            match self.write(buf) {
-                Ok(0) => return Err(Error::UnexpectedEof("failed to write whole buffer".into())),
-                Ok(n) => buf = &buf[n..],
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(())
-    }
-
-    fn write_fmt(&mut self, fmt: alloc::fmt::Arguments<'_>) -> Result<()> {
-        struct Adaptor<'a, T: ?Sized + 'a> {
-            inner: &'a mut T,
-            error: Result<()>,
-        }
-
-        impl<T: Write + ?Sized> alloc::fmt::Write for Adaptor<'_, T> {
-            fn write_str(&mut self, s: &str) -> alloc::fmt::Result {
-                match self.inner.write_all(s.as_bytes()) {
-                    Ok(()) => Ok(()),
-                    Err(e) => {
-                        self.error = Err(e);
-                        Err(alloc::fmt::Error)
-                    }
-                }
-            }
-        }
-
-        let mut output = Adaptor {
-            inner: self,
-            error: Ok(()),
-        };
-        match alloc::fmt::write(&mut output, fmt) {
-            Ok(()) => Ok(()),
-            Err(..) => {
-                if output.error.is_err() {
-                    output.error
-                } else {
-                    Err(Error::Other("formatter error".into()))
-                }
-            }
-        }
-    }
-}
 
 impl<T: Write + ?Sized> Write for &mut T {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {

@@ -24,12 +24,12 @@
 //!     }
 //! }
 //!
-//! impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
+//! impl<I: core2::io::Read> HttpRequestHandler<I> for FileHandler {
 //!     type Error = Error;
 //!     fn get(
 //!         &mut self,
 //!         uri: String,
-//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!     ) -> Result<HttpResponse<Box<dyn core2::io::Read>>> {
 //!         let path = self.file_root.join(uri.trim_start_matches("/"));
 //!         Ok(HttpResponse::new(
 //!             HttpStatus::OK,
@@ -41,7 +41,7 @@
 //!         &mut self,
 //!         uri: String,
 //!         mut stream: HttpBody<&mut I>,
-//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!     ) -> Result<HttpResponse<Box<dyn core2::io::Read>>> {
 //!         let path = self.file_root.join(uri.trim_start_matches("/"));
 //!         let mut file = std::fs::File::create(path)?;
 //!         io::copy(&mut stream, &mut file)?;
@@ -67,21 +67,22 @@
 //!     Ok(())
 //! }
 //! ```
-use crate::io;
+use core2::io;
+use crate::error;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
 #[cfg(not(feature = "std"))]
 use alloc::{
     boxed::Box,
     string::{String, ToString},
 };
-use core::result::Result;
 
-type HttpResult<T> = core::result::Result<T, HttpResponse<Box<dyn io::Read>>>;
 
-impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
-    fn from(error: crate::error::Error) -> Self {
+type HttpResult<T> = core::result::Result<T, HttpResponse<Box<dyn core2::io::Read>>>;
+
+impl From<error::Error> for HttpResponse<Box<dyn core2::io::Read>> {
+    fn from(error : error::Error) -> Self {
         match error {
-            crate::error::Error::LengthRequired => {
+            error::Error::LengthRequired => {
                 HttpResponse::from_string(HttpStatus::LengthRequired, "length required")
             }
             e => HttpResponse::from_string(HttpStatus::InternalServerError, e.to_string()),
@@ -91,14 +92,14 @@ impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
 
 /// Represents the ability to accept a new abstract connection.
 pub trait Listen {
-    type Stream: io::Read + io::Write;
-    fn accept(&self) -> crate::error::Result<Self::Stream>;
+    type Stream: core2::io::Read + core2::io::Write;
+    fn accept(&self) -> error::Result<Self::Stream>;
 }
 
 #[cfg(feature = "std")]
 impl Listen for std::net::TcpListener {
     type Stream = std::net::TcpStream;
-    fn accept(&self) -> crate::error::Result<std::net::TcpStream> {
+    fn accept(&self) -> core2::Result<std::net::TcpStream> {
         let (stream, _) = std::net::TcpListener::accept(self)?;
         Ok(stream)
     }
@@ -123,38 +124,38 @@ where
     <L as Listen>::Stream: std::fmt::Debug,
 {
     type Stream = openssl::ssl::SslStream<<L as Listen>::Stream>;
-    fn accept(&self) -> crate::error::Result<Self::Stream> {
+    fn accept(&self) -> core2::Result<Self::Stream> {
         let stream = self.listener.accept()?;
         Ok(self.acceptor.accept(stream)?)
     }
 }
 
 /// Represents the ability to service and respond to HTTP requests.
-pub trait HttpRequestHandler<I: io::Read> {
-    type Error: Into<HttpResponse<Box<dyn io::Read>>>;
+pub trait HttpRequestHandler<I: core2::io::Read> {
+    type Error: Into<HttpResponse<Box<dyn core2::io::Read>>>;
 
-    fn delete(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn delete(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "DELETE not allowed",
         ))
     }
 
-    fn get(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn get(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "GET not allowed",
         ))
     }
 
-    fn head(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn head(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "HEAD not allowed",
         ))
     }
 
-    fn options(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn options(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "OPTIONS not allowed",
@@ -165,7 +166,7 @@ pub trait HttpRequestHandler<I: io::Read> {
         &mut self,
         _uri: String,
         _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "PUT not allowed",
@@ -176,14 +177,14 @@ pub trait HttpRequestHandler<I: io::Read> {
         &mut self,
         _uri: String,
         _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "PUT not allowed",
         ))
     }
 
-    fn trace(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn trace(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "TRACE not allowed",
@@ -206,7 +207,7 @@ impl<L: Listen, H: HttpRequestHandler<L::Stream>> HttpServer<L, H> {
         }
     }
 
-    pub fn serve_one(&mut self) -> io::Result<()> {
+    pub fn serve_one(&mut self) -> error::Result<()> {
         let mut stream = self.connection_stream.accept()?;
         let mut response = match self.serve_one_inner(&mut stream) {
             Ok(response) => response,
@@ -223,7 +224,7 @@ impl<L: Listen, H: HttpRequestHandler<L::Stream>> HttpServer<L, H> {
     pub fn serve_one_inner(
         &mut self,
         stream: &mut <L as Listen>::Stream,
-    ) -> HttpResult<HttpResponse<Box<dyn io::Read>>> {
+    ) -> HttpResult<HttpResponse<Box<dyn core2::io::Read>>> {
         let request = HttpRequest::deserialize(io::BufReader::new(stream))?;
 
         match request.method {
@@ -281,13 +282,13 @@ impl TestRequestHandler {
 }
 
 #[cfg(test)]
-use std::io::Read;
+use std::core2::io::Read;
 
 #[cfg(test)]
-impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
-    type Error = HttpResponse<Box<dyn io::Read>>;
+impl<I: core2::io::Read> HttpRequestHandler<I> for TestRequestHandler {
+    type Error = HttpResponse<Box<dyn core2::io::Read>>;
 
-    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Get);
         assert_eq!(request.expected_uri, uri);
@@ -302,7 +303,7 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         &mut self,
         uri: String,
         mut stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn core2::io::Read>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Put);
         assert_eq!(request.expected_uri, uri);
@@ -328,7 +329,7 @@ impl Drop for TestRequestHandler {
 #[cfg(test)]
 pub fn test_server(
     script: Vec<ExpectedRequest>,
-) -> crate::error::Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
+) -> core2::Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
     let server_socket = std::net::TcpListener::bind("localhost:0")?;
     let server_address = server_socket.local_addr()?;
     let handler = TestRequestHandler::new(script);
@@ -340,7 +341,7 @@ pub fn test_server(
 #[cfg(test)]
 pub fn test_ssl_server(
     script: Vec<ExpectedRequest>,
-) -> crate::error::Result<(
+) -> core2::Result<(
     u16,
     HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
 )> {

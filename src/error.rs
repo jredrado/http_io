@@ -24,6 +24,8 @@ pub enum Error {
 
     #[cfg(feature = "openssl")]
     SslError(String),
+
+    IoError(core2::io::Error),
 }
 
 pub type Result<R> = core::result::Result<R, Error>;
@@ -83,3 +85,18 @@ impl<S: fmt::Debug> From<openssl::ssl::HandshakeError<S>> for Error {
         Error::SslError(e.to_string())
     }
 }
+
+
+impl From<core2::io::Error> for Error {
+    fn from(e: core2::io::Error) -> Self {
+        Error::IoError(e)
+    }
+}
+
+use alloc::borrow::ToOwned;
+impl From<&core2::io::Error> for Error {
+    fn from(e: &core2::io::Error) -> Self {
+        Error::IoError( e.kind().into() )
+    }
+}
+

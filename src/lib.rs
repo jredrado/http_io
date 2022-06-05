@@ -15,11 +15,11 @@ pub mod error;
 pub mod protocol;
 pub mod url;
 
-#[cfg(not(feature = "std"))]
-pub mod io;
+//#[cfg(not(feature = "std"))]
+//pub mod io;
 
-#[cfg(not(feature = "std"))]
-pub use io::{Read, Write};
+//#[cfg(not(feature = "std"))]
+//pub use io::{Read, Write};
 
 #[cfg(feature = "std")]
 use std::io;
